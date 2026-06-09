@@ -5,11 +5,126 @@ from __future__ import annotations
 import os
 import sys
 
+EXAMPLES = [
+    {
+        "name": "Fan-out — revenue doubles",
+        "db": ":memory:",
+        "setup_sql": (
+            "CREATE TABLE orders (order_id INT, amount DOUBLE);\n"
+            "INSERT INTO orders VALUES (1, 100.0), (2, 200.0), (3, 150.0);\n"
+            "CREATE TABLE addr (order_id INT, city TEXT);\n"
+            "INSERT INTO addr VALUES"
+            " (1, 'NYC'), (1, 'Boston'),"
+            " (2, 'Chicago'), (2, 'Denver'),"
+            " (3, 'Seattle'), (3, 'Portland')"
+        ),
+        "old_sql": "SELECT order_id, amount FROM orders",
+        "new_sql": (
+            "SELECT o.order_id, o.amount, a.city\n"
+            "FROM orders o JOIN addr a ON o.order_id = a.order_id"
+        ),
+        "key": "order_id",
+        "metrics": "amount",
+        "explain": False,
+    },
+    {
+        "name": "Safe refactor — no change",
+        "db": ":memory:",
+        "setup_sql": (
+            "CREATE TABLE orders (order_id INT, amount DOUBLE);\n"
+            "INSERT INTO orders VALUES (1, 100.0), (2, 200.0), (3, 150.0)"
+        ),
+        "old_sql": "SELECT order_id, amount FROM orders WHERE amount > 0",
+        "new_sql": (
+            "WITH base AS (SELECT order_id, amount FROM orders WHERE amount > 0)\n"
+            "SELECT * FROM base"
+        ),
+        "key": "order_id",
+        "metrics": "amount",
+        "explain": False,
+    },
+    {
+        "name": "Row drop — LEFT to INNER",
+        "db": ":memory:",
+        "setup_sql": (
+            "CREATE TABLE orders (order_id INT, customer_id INT, amount DOUBLE);\n"
+            "INSERT INTO orders VALUES (1, 10, 50.0), (2, 20, 75.0), (3, NULL, 30.0);\n"
+            "CREATE TABLE customers (customer_id INT, name TEXT);\n"
+            "INSERT INTO customers VALUES (10, 'Alice'), (20, 'Bob')"
+        ),
+        "old_sql": (
+            "SELECT o.order_id, o.amount, c.name\n"
+            "FROM orders o LEFT JOIN customers c ON o.customer_id = c.customer_id"
+        ),
+        "new_sql": (
+            "SELECT o.order_id, o.amount, c.name\n"
+            "FROM orders o INNER JOIN customers c ON o.customer_id = c.customer_id"
+        ),
+        "key": "order_id",
+        "metrics": "amount",
+        "explain": False,
+    },
+    {
+        "name": "Honest unknown — no key",
+        "db": ":memory:",
+        "setup_sql": (
+            "CREATE TABLE orders (order_id INT, amount DOUBLE);\n"
+            "INSERT INTO orders VALUES (1, 100.0), (2, 200.0), (3, 150.0);\n"
+            "CREATE TABLE addr (order_id INT, city TEXT);\n"
+            "INSERT INTO addr VALUES"
+            " (1, 'NYC'), (1, 'Boston'),"
+            " (2, 'Chicago'), (2, 'Denver'),"
+            " (3, 'Seattle'), (3, 'Portland')"
+        ),
+        "old_sql": "SELECT order_id, amount FROM orders",
+        "new_sql": (
+            "SELECT o.order_id, o.amount, a.city\n"
+            "FROM orders o JOIN addr a ON o.order_id = a.order_id"
+        ),
+        "key": "",
+        "metrics": "amount",
+        "explain": False,
+    },
+]
+
 
 def main() -> None:
     """Launch the Streamlit app."""
     app_path = os.path.abspath(__file__)
     os.execvp("streamlit", ["streamlit", "run", app_path, "--server.headless=false"])
+
+
+def _init_state(st) -> None:
+    defaults = {
+        "s_db_path": ":memory:",
+        "s_manifest_path": "",
+        "s_setup_sql": "",
+        "s_key_col": "",
+        "s_metric_cols": "",
+        "s_old_sql": "",
+        "s_new_sql": "",
+        "s_explain": False,
+        "s_example": "",
+    }
+    for k, v in defaults.items():
+        if k not in st.session_state:
+            st.session_state[k] = v
+
+
+def _load_example(st) -> None:
+    name = st.session_state.get("s_example", "")
+    if not name:
+        return
+    ex = next((e for e in EXAMPLES if e["name"] == name), None)
+    if ex is None:
+        return
+    st.session_state["s_db_path"] = ex["db"]
+    st.session_state["s_setup_sql"] = ex["setup_sql"]
+    st.session_state["s_old_sql"] = ex["old_sql"]
+    st.session_state["s_new_sql"] = ex["new_sql"]
+    st.session_state["s_key_col"] = ex["key"]
+    st.session_state["s_metric_cols"] = ex["metrics"]
+    st.session_state["s_explain"] = ex["explain"]
 
 
 def _app() -> None:
@@ -19,18 +134,22 @@ def _app() -> None:
     from probe.db import DuckDBAdapter
 
     st.set_page_config(page_title="Probe", page_icon="🔍", layout="wide")
+    _init_state(st)
     st.title("🔍 Probe — SQL Reviewer")
 
     # ── Sidebar ──────────────────────────────────────────────────────────
     with st.sidebar:
         st.header("Settings")
-        db_path = st.text_input("DuckDB path", value=":memory:")
-        manifest_path = st.text_input("dbt manifest.json path", value="")
+        db_path = st.text_input("DuckDB path", key="s_db_path")
+        manifest_path = st.text_input("dbt manifest.json path", key="s_manifest_path")
         setup_sql = st.text_area(
-            "Setup SQL (optional)", height=80, placeholder="CREATE TABLE ..."
+            "Setup SQL (optional)", height=80,
+            placeholder="CREATE TABLE ...", key="s_setup_sql",
         )
-        key_col = st.text_input("Key column (for grain probe)", value="")
-        metric_cols = st.text_input("Metric columns (comma-separated)", value="")
+        key_col = st.text_input("Key column (for grain probe)", key="s_key_col")
+        metric_cols = st.text_input(
+            "Metric columns (comma-separated)", key="s_metric_cols",
+        )
 
     # ── Load manifest ────────────────────────────────────────────────────
     graph = None
@@ -84,20 +203,32 @@ def _app() -> None:
 
     # ── Diff tab ─────────────────────────────────────────────────────────
     with tab_diff:
+        example_names = [""] + [e["name"] for e in EXAMPLES]
+        st.selectbox(
+            "Load example",
+            example_names,
+            key="s_example",
+            on_change=_load_example,
+            args=(st,),
+        )
+
         col1, col2 = st.columns(2)
         with col1:
             old_sql = st.text_area(
-                "Old SQL", height=200, placeholder="SELECT * FROM orders"
+                "Old SQL", height=200,
+                placeholder="SELECT * FROM orders",
+                key="s_old_sql",
             )
         with col2:
             new_sql = st.text_area(
                 "New SQL", height=200,
                 placeholder="SELECT * FROM orders ...",
+                key="s_new_sql",
             )
 
         explain_check = st.checkbox(
             "Explain (requires ANTHROPIC_API_KEY or OPENAI_API_KEY)",
-            value=False,
+            key="s_explain",
         )
 
         if st.button("Run Probe Diff", type="primary"):
@@ -112,7 +243,6 @@ def _app() -> None:
                     graph, selected_id if graph else None,
                     explain_check, DuckDBAdapter,
                 )
-
 
     # ── Verify tab ────────────────────────────────────────────────────────
     with tab_verify:
