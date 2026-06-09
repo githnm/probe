@@ -40,7 +40,9 @@ def _app() -> None:
         graph = load_manifest(manifest_path)
 
     # ── Tabs ─────────────────────────────────────────────────────────────
-    tab_tables, tab_lineage, tab_diff = st.tabs(["Tables", "Lineage", "Diff"])
+    tab_tables, tab_lineage, tab_diff, tab_verify = st.tabs(
+        ["Tables", "Lineage", "Diff", "Verify"]
+    )
 
     # ── Tables tab ───────────────────────────────────────────────────────
     with tab_tables:
@@ -109,6 +111,70 @@ def _app() -> None:
                     or None,
                     graph, selected_id if graph else None,
                     explain_check, DuckDBAdapter,
+                )
+
+
+    # ── Verify tab ────────────────────────────────────────────────────────
+    with tab_verify:
+        model_names_v = sorted(graph.nodes()) if graph else []
+
+        if model_names_v:
+            vc1, vc2 = st.columns(2)
+            with vc1:
+                up_model = st.selectbox(
+                    "Upstream model (optional)", ["(custom)"] + model_names_v,
+                    key="verify_up_model",
+                )
+            with vc2:
+                down_model = st.selectbox(
+                    "Downstream model (optional)", ["(custom)"] + model_names_v,
+                    key="verify_down_model",
+                )
+            up_default = (
+                f"SELECT * FROM {up_model}" if up_model != "(custom)" else ""
+            )
+            down_default = (
+                f"SELECT * FROM {down_model}" if down_model != "(custom)" else ""
+            )
+        else:
+            up_default = ""
+            down_default = ""
+
+        vq1, vq2 = st.columns(2)
+        with vq1:
+            v_up_sql = st.text_area(
+                "Upstream query", height=150, value=up_default,
+                key="verify_up_sql",
+            )
+        with vq2:
+            v_down_sql = st.text_area(
+                "Downstream query", height=150, value=down_default,
+                key="verify_down_sql",
+            )
+
+        v_mappings_str = st.text_input(
+            "Column mappings (optional, down=up, comma-separated)",
+            value="", key="verify_mappings",
+        )
+
+        if st.button("Run Verify", type="primary", key="verify_run"):
+            if not v_up_sql.strip() or not v_down_sql.strip():
+                st.warning("Enter both upstream and downstream queries.")
+            elif not key_col:
+                st.warning("Enter a key column in the sidebar.")
+            else:
+                v_mappings = None
+                if v_mappings_str.strip():
+                    v_mappings = {}
+                    for pair in v_mappings_str.split(","):
+                        pair = pair.strip()
+                        if "=" in pair:
+                            d, u = pair.split("=", 1)
+                            v_mappings[d.strip()] = u.strip()
+                _run_verify(
+                    st, db_path, setup_sql,
+                    v_up_sql, v_down_sql, key_col, v_mappings,
+                    DuckDBAdapter,
                 )
 
 
@@ -296,6 +362,68 @@ def _run_diff(
             c2.markdown(f"**New:** {new_str}")
             c3.markdown(f"**Delta:** {delta_str}")
             st.caption(f"Status: {r.status}")
+            with st.expander("Receipt"):
+                if r.receipt.sql:
+                    st.code(r.receipt.sql, language="sql")
+                if isinstance(r.receipt.result, (dict, list)):
+                    st.json(r.receipt.result)
+                else:
+                    st.text(str(r.receipt.result))
+
+
+# ── Verify runner ────────────────────────────────────────────────────────
+
+
+def _run_verify(st, db_path, setup_sql, up_sql, down_sql, key, mappings, adapter_cls):
+    from probe.verify import verify
+
+    adapter = adapter_cls.connect(db_path)
+    try:
+        if setup_sql and setup_sql.strip():
+            for stmt in setup_sql.split(";"):
+                s = stmt.strip()
+                if s:
+                    adapter.run(s)
+        results = verify(adapter, up_sql, down_sql, key, mappings=mappings)
+    except Exception as e:
+        st.error(f"Error running verify: {e}")
+        return
+    finally:
+        adapter.close()
+
+    if not results:
+        st.info("No column edges to verify (no shared columns found).")
+        return
+
+    # ── Summary ──────────────────────────────────────────────────────
+    n_verified = sum(1 for r in results if r.verdict == "verified")
+    n_killed = sum(1 for r in results if r.verdict == "killed")
+    n_unverified = sum(1 for r in results if r.verdict == "unverified")
+    st.markdown(
+        f"**{n_verified} verified** · "
+        f"**{n_killed} killed** · "
+        f"**{n_unverified} unverified**"
+    )
+
+    # ── Edge cards ───────────────────────────────────────────────────
+    verdict_color = {"verified": "green", "killed": "red", "unverified": "orange"}
+    verdict_icon = {"verified": "✅", "killed": "❌", "unverified": "❓"}
+    for r in results:
+        icon = verdict_icon.get(r.verdict, "")
+        color = verdict_color.get(r.verdict, "gray")
+        with st.container(border=True):
+            st.markdown(
+                f"**{icon} `{r.downstream_col}` ← `{r.claimed_parent}`** — "
+                f'<span style="color:{color};font-weight:bold">'
+                f"{r.verdict}</span>",
+                unsafe_allow_html=True,
+            )
+            if r.match_rate is not None:
+                st.markdown(f"Match rate: **{r.match_rate}%**")
+            if r.real_parent:
+                st.markdown(
+                    f"Suggested real parent: **`{r.real_parent}`**"
+                )
             with st.expander("Receipt"):
                 if r.receipt.sql:
                     st.code(r.receipt.sql, language="sql")
