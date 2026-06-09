@@ -88,6 +88,71 @@ EXAMPLES = [
 ]
 
 
+VERIFY_EXAMPLES = [
+    {
+        "name": "Clean passthrough — verified",
+        "db": ":memory:",
+        "setup_sql": (
+            "CREATE TABLE src (id INT, customer TEXT, region TEXT);\n"
+            "INSERT INTO src VALUES"
+            " (1, 'Acme', 'East'), (2, 'Globex', 'West'), (3, 'Initech', 'East');\n"
+            "CREATE TABLE final (id INT, customer TEXT, region TEXT);\n"
+            "INSERT INTO final VALUES"
+            " (1, 'Acme', 'East'), (2, 'Globex', 'West'), (3, 'Initech', 'East')"
+        ),
+        "upstream_sql": "SELECT * FROM src",
+        "downstream_sql": "SELECT * FROM final",
+        "key": "id",
+        "mappings": "",
+    },
+    {
+        "name": "Wrong source — killed, real parent found",
+        "db": ":memory:",
+        "setup_sql": (
+            "CREATE TABLE src (id INT, region TEXT, territory TEXT);\n"
+            "INSERT INTO src VALUES"
+            " (1, 'East', 'North'), (2, 'West', 'South'), (3, 'East', 'North');\n"
+            "CREATE TABLE final (id INT, area TEXT);\n"
+            "INSERT INTO final VALUES (1, 'North'), (2, 'South'), (3, 'North')"
+        ),
+        "upstream_sql": "SELECT * FROM src",
+        "downstream_sql": "SELECT * FROM final",
+        "key": "id",
+        "mappings": "area=region",
+    },
+    {
+        "name": "Drift — killed, no parent",
+        "db": ":memory:",
+        "setup_sql": (
+            "CREATE TABLE src (id INT, status TEXT);\n"
+            "INSERT INTO src VALUES (1, 'active'), (2, 'active'), (3, 'churned');\n"
+            "CREATE TABLE final (id INT, status TEXT);\n"
+            "INSERT INTO final VALUES (1, 'active'), (2, 'paused'), (3, 'churned')"
+        ),
+        "upstream_sql": "SELECT * FROM src",
+        "downstream_sql": "SELECT * FROM final",
+        "key": "id",
+        "mappings": "",
+    },
+    {
+        "name": "No key — unverified",
+        "db": ":memory:",
+        "setup_sql": (
+            "CREATE TABLE src (id INT, customer TEXT, region TEXT);\n"
+            "INSERT INTO src VALUES"
+            " (1, 'Acme', 'East'), (2, 'Globex', 'West'), (3, 'Initech', 'East');\n"
+            "CREATE TABLE final (id INT, customer TEXT, region TEXT);\n"
+            "INSERT INTO final VALUES"
+            " (1, 'Acme', 'East'), (2, 'Globex', 'West'), (3, 'Initech', 'East')"
+        ),
+        "upstream_sql": "SELECT * FROM src",
+        "downstream_sql": "SELECT * FROM final",
+        "key": "",
+        "mappings": "",
+    },
+]
+
+
 def main() -> None:
     """Launch the Streamlit app."""
     app_path = os.path.abspath(__file__)
@@ -105,6 +170,10 @@ def _init_state(st) -> None:
         "s_new_sql": "",
         "s_explain": False,
         "s_example": "",
+        "s_verify_example": "",
+        "s_verify_up_sql": "",
+        "s_verify_down_sql": "",
+        "s_verify_mappings": "",
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -125,6 +194,26 @@ def _load_example(st) -> None:
     st.session_state["s_key_col"] = ex["key"]
     st.session_state["s_metric_cols"] = ex["metrics"]
     st.session_state["s_explain"] = ex["explain"]
+
+
+def _load_verify_example(st) -> None:
+    name = st.session_state.get("s_verify_example", "")
+    if not name:
+        return
+    ex = next((e for e in VERIFY_EXAMPLES if e["name"] == name), None)
+    if ex is None:
+        return
+    st.session_state["s_db_path"] = ex["db"]
+    st.session_state["s_setup_sql"] = ex["setup_sql"]
+    st.session_state["s_key_col"] = ex["key"]
+    st.session_state["s_verify_up_sql"] = ex["upstream_sql"]
+    st.session_state["s_verify_down_sql"] = ex["downstream_sql"]
+    st.session_state["s_verify_mappings"] = ex["mappings"]
+    # Clear model dropdowns so they don't override example queries
+    if "verify_up_model" in st.session_state:
+        st.session_state["verify_up_model"] = "(custom)"
+    if "verify_down_model" in st.session_state:
+        st.session_state["verify_down_model"] = "(custom)"
 
 
 def _app() -> None:
@@ -246,6 +335,15 @@ def _app() -> None:
 
     # ── Verify tab ────────────────────────────────────────────────────────
     with tab_verify:
+        verify_example_names = [""] + [e["name"] for e in VERIFY_EXAMPLES]
+        st.selectbox(
+            "Load example",
+            verify_example_names,
+            key="s_verify_example",
+            on_change=_load_verify_example,
+            args=(st,),
+        )
+
         model_names_v = sorted(graph.nodes()) if graph else []
 
         if model_names_v:
@@ -260,31 +358,28 @@ def _app() -> None:
                     "Downstream model (optional)", ["(custom)"] + model_names_v,
                     key="verify_down_model",
                 )
-            up_default = (
-                f"SELECT * FROM {up_model}" if up_model != "(custom)" else ""
-            )
-            down_default = (
-                f"SELECT * FROM {down_model}" if down_model != "(custom)" else ""
-            )
-        else:
-            up_default = ""
-            down_default = ""
+            if up_model != "(custom)":
+                st.session_state["s_verify_up_sql"] = f"SELECT * FROM {up_model}"
+            if down_model != "(custom)":
+                st.session_state["s_verify_down_sql"] = (
+                    f"SELECT * FROM {down_model}"
+                )
 
         vq1, vq2 = st.columns(2)
         with vq1:
             v_up_sql = st.text_area(
-                "Upstream query", height=150, value=up_default,
-                key="verify_up_sql",
+                "Upstream query", height=150,
+                key="s_verify_up_sql",
             )
         with vq2:
             v_down_sql = st.text_area(
-                "Downstream query", height=150, value=down_default,
-                key="verify_down_sql",
+                "Downstream query", height=150,
+                key="s_verify_down_sql",
             )
 
         v_mappings_str = st.text_input(
             "Column mappings (optional, down=up, comma-separated)",
-            value="", key="verify_mappings",
+            key="s_verify_mappings",
         )
 
         if st.button("Run Verify", type="primary", key="verify_run"):
