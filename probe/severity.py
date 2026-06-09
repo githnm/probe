@@ -8,7 +8,7 @@ SEVERITY_ORDER = {"info": 0, "warn": 1, "block": 2}
 
 
 def classify(result: ProbeResult) -> str:
-    if result.status == "ok":
+    if result.status in ("ok", "unverified"):
         return "info"
 
     if result.name == "row_count":

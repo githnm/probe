@@ -1,0 +1,8 @@
+{
+  "name": "fan_out",
+  "description": "One-to-many JOIN fans out rows, inflating row count.",
+  "expected_severity": "block",
+  "expected_probe": "row_count",
+  "also_fires": ["grain"],
+  "key": "order_id"
+}

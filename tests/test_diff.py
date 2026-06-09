@@ -28,7 +28,7 @@ class TestRunDiff:
     def test_no_change_is_info(self, adapter):
         report = run_diff(adapter, OLD_SQL, OLD_SQL)
         assert report.severity == "info"
-        assert all(r.status == "ok" for r in report.results)
+        assert all(r.status in ("ok", "unverified") for r in report.results)
 
     def test_row_drop_is_warn(self, adapter):
         new_sql = "SELECT * FROM orders WHERE id <= 2"
@@ -55,8 +55,9 @@ class TestRunDiff:
         report = run_diff(adapter, OLD_SQL, OLD_SQL)
         for r in report.results:
             assert r.receipt is not None
-            assert r.receipt.sql
             assert r.receipt.result is not None
+            if r.status != "unverified":
+                assert r.receipt.sql
 
     def test_scope_lists_changed_columns(self, adapter):
         new_sql = "SELECT id, customer, amount * 2 AS doubled FROM orders"

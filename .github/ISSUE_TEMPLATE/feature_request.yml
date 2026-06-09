@@ -1,0 +1,28 @@
+name: Feature request
+description: Suggest a new probe, adapter, or feature.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: What would you like?
+      description: Describe the feature and why it would be useful.
+    validations:
+      required: true
+  - type: textarea
+    id: example
+    attributes:
+      label: Example
+      description: Show an example of the SQL change this would catch, or the command you'd run.
+      render: sql
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - New probe
+        - New adapter
+        - CLI
+        - GitHub Action
+        - Lineage
+        - Other

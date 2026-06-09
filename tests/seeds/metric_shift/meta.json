@@ -1,0 +1,7 @@
+{
+  "name": "metric_shift",
+  "description": "WHERE clause silently filters rows, shifting downstream metrics.",
+  "expected_severity": "warn",
+  "expected_probe": "row_count",
+  "key": "txn_id"
+}

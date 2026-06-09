@@ -1,0 +1,8 @@
+{
+  "name": "grain_change",
+  "description": "Model changes from order-level to line-item-level grain, duplicating order_id.",
+  "expected_severity": "block",
+  "expected_probe": "grain",
+  "also_fires": ["row_count", "column_presence"],
+  "key": "order_id"
+}

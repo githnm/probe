@@ -26,7 +26,21 @@ class ProbeResult:
 
 
 @dataclass
+class Explanation:
+    summary: str
+    findings: list[Finding]
+
+
+@dataclass
+class Finding:
+    claim: str
+    backed_by: str  # probe name that backs this claim, or "" if unbacked
+    confirmed: bool
+
+
+@dataclass
 class Report:
     results: list[ProbeResult]
     severity: str  # "info" | "warn" | "block"
     scope: list[str]
+    explanation: Explanation | None = None

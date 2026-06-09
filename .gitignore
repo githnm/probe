@@ -13,3 +13,5 @@ venv/
 .ruff_cache/
 *.so
 .mypy_cache/
+*.duckdb
+*.duckdb.wal

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from probe import ProbeResult, Report  # noqa: I001
+from probe import Explanation, ProbeResult, Report  # noqa: I001
 
 _SEVERITY_SYMBOL = {"info": "i", "warn": "!", "block": "X"}
 _STATUS_SYMBOL = {"ok": ".", "changed": "~", "unverified": "?"}
@@ -15,8 +15,23 @@ def render_terminal(report: Report) -> str:
     if report.scope:
         lines.append(f"    scope: {', '.join(report.scope)}")
     lines.append("")
+    if report.explanation:
+        lines.append(_render_explanation_terminal(report.explanation))
+        lines.append("")
     for r in report.results:
         lines.append(_render_finding_terminal(r))
+    return "\n".join(lines)
+
+
+def _render_explanation_terminal(exp: Explanation) -> str:
+    lines = [
+        "  Explanation:",
+        f"    {exp.summary}",
+    ]
+    for f in exp.findings:
+        tag = "confirmed" if f.confirmed else "unconfirmed"
+        backed = f" (backed by: {f.backed_by})" if f.backed_by else ""
+        lines.append(f"    - [{tag}] {f.claim}{backed}")
     return "\n".join(lines)
 
 
@@ -40,9 +55,26 @@ def render_markdown(report: Report) -> str:
     if report.scope:
         lines.append(f"**Scope:** {', '.join(report.scope)}")
     lines.append("")
+    if report.explanation:
+        lines.append(_render_explanation_markdown(report.explanation))
+        lines.append("")
     for r in report.results:
         lines.append(_render_finding_markdown(r))
         lines.append("")
+    return "\n".join(lines)
+
+
+def _render_explanation_markdown(exp: Explanation) -> str:
+    lines = [
+        "### Explanation",
+        "",
+        exp.summary,
+        "",
+    ]
+    for f in exp.findings:
+        tag = "confirmed" if f.confirmed else "unconfirmed"
+        backed = f" (backed by: {f.backed_by})" if f.backed_by else ""
+        lines.append(f"- **[{tag}]** {f.claim}{backed}")
     return "\n".join(lines)
 
 

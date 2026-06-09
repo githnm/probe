@@ -1,0 +1,72 @@
+name: "Probe SQL Reviewer"
+description: "Run SQL probes against real data and comment findings on your PR."
+branding:
+  icon: "search"
+  color: "blue"
+
+inputs:
+  old-sql:
+    description: "SQL for the old version (query text or path prefixed with @)."
+    required: true
+  new-sql:
+    description: "SQL for the new version (query text or path prefixed with @)."
+    required: true
+  db-url:
+    description: "Database connection URL. Use a read-only role."
+    required: true
+  adapter:
+    description: "Database adapter: duckdb or postgres."
+    required: false
+    default: "duckdb"
+  key:
+    description: "Column name for the grain probe."
+    required: false
+    default: ""
+  manifest:
+    description: "Path to dbt manifest.json for lineage scoping."
+    required: false
+    default: ""
+  model:
+    description: "Changed model name (used with manifest)."
+    required: false
+    default: ""
+  explain:
+    description: "Add LLM explanation (requires ANTHROPIC_API_KEY or OPENAI_API_KEY)."
+    required: false
+    default: "false"
+
+outputs:
+  severity:
+    description: "Overall severity: info, warn, or block."
+  comment-id:
+    description: "ID of the posted or updated PR comment."
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install Probe
+      shell: bash
+      run: |
+        python -m pip install --upgrade pip
+        pip install "${{ github.action_path }}[postgres]"
+        pip install duckdb
+
+    - name: Run Probe
+      id: probe
+      shell: bash
+      env:
+        INPUT_OLD_SQL: ${{ inputs.old-sql }}
+        INPUT_NEW_SQL: ${{ inputs.new-sql }}
+        INPUT_DB_URL: ${{ inputs.db-url }}
+        INPUT_ADAPTER: ${{ inputs.adapter }}
+        INPUT_KEY: ${{ inputs.key }}
+        INPUT_MANIFEST: ${{ inputs.manifest }}
+        INPUT_MODEL: ${{ inputs.model }}
+        INPUT_EXPLAIN: ${{ inputs.explain }}
+        GITHUB_TOKEN: ${{ github.token }}
+      run: python "${{ github.action_path }}/entrypoint.py"

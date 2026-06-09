@@ -1,0 +1,7 @@
+{
+  "name": "new_nulls",
+  "description": "LEFT JOIN with CASE nulls out email for unverified users.",
+  "expected_severity": "warn",
+  "expected_probe": "null_rate",
+  "key": "id"
+}

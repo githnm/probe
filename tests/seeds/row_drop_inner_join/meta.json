@@ -1,0 +1,7 @@
+{
+  "name": "row_drop_inner_join",
+  "description": "INNER JOIN silently drops rows for unmatched users.",
+  "expected_severity": "warn",
+  "expected_probe": "row_count",
+  "key": "event_id"
+}

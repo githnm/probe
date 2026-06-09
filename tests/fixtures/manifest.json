@@ -1,0 +1,54 @@
+{
+  "metadata": {"dbt_schema_version": "https://schemas.getdbt.com/dbt/manifest/v12"},
+  "nodes": {
+    "model.shop.stg_orders": {
+      "unique_id": "model.shop.stg_orders",
+      "name": "stg_orders",
+      "resource_type": "model",
+      "depends_on": {"nodes": []},
+      "columns": {
+        "order_id": {"name": "order_id", "description": "Primary key"},
+        "customer_id": {"name": "customer_id", "description": "FK to customers"},
+        "amount": {"name": "amount", "description": "Order total"}
+      }
+    },
+    "model.shop.orders": {
+      "unique_id": "model.shop.orders",
+      "name": "orders",
+      "resource_type": "model",
+      "depends_on": {"nodes": ["model.shop.stg_orders"]},
+      "columns": {
+        "order_id": {"name": "order_id", "description": "Primary key"},
+        "customer_id": {"name": "customer_id", "description": "FK"},
+        "amount": {"name": "amount", "description": "Order total"},
+        "status": {"name": "status", "description": "Order status"}
+      }
+    },
+    "model.shop.revenue": {
+      "unique_id": "model.shop.revenue",
+      "name": "revenue",
+      "resource_type": "model",
+      "depends_on": {"nodes": ["model.shop.orders"]},
+      "columns": {
+        "customer_id": {"name": "customer_id", "description": "Customer"},
+        "total_amount": {"name": "total_amount", "description": "Sum of orders"}
+      }
+    },
+    "model.shop.customers": {
+      "unique_id": "model.shop.customers",
+      "name": "customers",
+      "resource_type": "model",
+      "depends_on": {"nodes": ["model.shop.orders"]},
+      "columns": {
+        "customer_id": {"name": "customer_id", "description": "PK"},
+        "order_count": {"name": "order_count", "description": "Number of orders"}
+      }
+    }
+  },
+  "child_map": {
+    "model.shop.stg_orders": ["model.shop.orders"],
+    "model.shop.orders": ["model.shop.revenue", "model.shop.customers"],
+    "model.shop.revenue": [],
+    "model.shop.customers": []
+  }
+}

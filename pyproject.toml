@@ -13,8 +13,13 @@ dependencies = [
     "click>=8.0",
 ]
 
+[project.optional-dependencies]
+postgres = ["psycopg[binary]>=3.1"]
+dev = ["duckdb", "psycopg[binary]>=3.1", "pytest", "ruff"]
+
 [project.scripts]
 probe = "probe.cli:main"
+probe-bench = "tests.bench:main"
 
 [tool.ruff]
 target-version = "py311"
