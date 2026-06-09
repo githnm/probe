@@ -29,9 +29,12 @@ gate merges on it.
 
 ## Quickstart (2 minutes, DuckDB, no server)
 
+Requires pip 21.3+ (the venv upgrade step below handles this).
+
 ```bash
 git clone https://github.com/githnm/probe.git && cd probe
 python3 -m venv .venv && source .venv/bin/activate
+python -m pip install --upgrade pip
 pip install -e . && pip install duckdb
 
 # Seed a small database: 5 orders + 6 customer addresses (one-to-many)
@@ -151,6 +154,7 @@ row-drop-via-inner-join, grain change, new nulls, and metric shift scenarios.
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
+python -m pip install --upgrade pip
 pip install -e ".[dev]"
 
 pytest           # 123 tests (Postgres tests need PROBE_PG_URL)
