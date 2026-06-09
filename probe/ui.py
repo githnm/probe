@@ -187,17 +187,36 @@ def _run_diff(
         status_icon = {"ok": "✅", "changed": "🔶", "unverified": "❓"}.get(r.status, "")
         with st.container(border=True):
             st.markdown(f"**{status_icon} {r.name}** — {r.question}")
+            old_str = _summarize(r.old_value)
+            new_str = _summarize(r.new_value)
+            delta_str = _summarize(r.delta)
             c1, c2, c3 = st.columns(3)
-            c1.metric("Old", str(r.old_value))
-            c2.metric("New", str(r.new_value))
-            c3.metric("Delta", str(r.delta))
+            c1.markdown(f"**Old:** {old_str}")
+            c2.markdown(f"**New:** {new_str}")
+            c3.markdown(f"**Delta:** {delta_str}")
             st.caption(f"Status: {r.status}")
             with st.expander("Receipt"):
                 if r.receipt.sql:
                     st.code(r.receipt.sql, language="sql")
-                st.json(r.receipt.result) if isinstance(
-                    r.receipt.result, (dict, list)
-                ) else st.text(str(r.receipt.result))
+                if isinstance(r.receipt.result, (dict, list)):
+                    st.json(r.receipt.result)
+                else:
+                    st.text(str(r.receipt.result))
+
+
+def _summarize(value: object) -> str:
+    if value is None:
+        return "—"
+    if isinstance(value, dict):
+        parts = [f"{k}: {v}" for k, v in value.items()]
+        if len(parts) <= 3:
+            return ", ".join(parts)
+        return ", ".join(parts[:3]) + f" (+{len(parts) - 3} more)"
+    if isinstance(value, list):
+        if len(value) <= 4:
+            return ", ".join(str(v) for v in value)
+        return ", ".join(str(v) for v in value[:3]) + f" (+{len(value) - 3} more)"
+    return str(value)
 
 
 # Streamlit runs this file as a script — detect that and call _app()
