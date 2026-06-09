@@ -21,7 +21,7 @@ def format_comment(report: Report) -> str:
         render_markdown(report),
         "",
         "---",
-        "*Posted by [Probe](https://github.com/probe-sql/probe) — "
+        "*Posted by [Probe](https://github.com/githnm/probe) — "
         "a SQL reviewer that reports what changed, with proof.*",
     ]
     return "\n".join(lines)

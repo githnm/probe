@@ -5,7 +5,7 @@ Thanks for your interest in Probe! This guide will help you get started.
 ## Getting started
 
 ```bash
-git clone https://github.com/probe-sql/probe.git && cd probe
+git clone https://github.com/githnm/probe.git && cd probe
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 pytest && ruff check .

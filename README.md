@@ -30,7 +30,7 @@ gate merges on it.
 ## Quickstart (2 minutes, DuckDB, no server)
 
 ```bash
-git clone https://github.com/probe-sql/probe.git && cd probe
+git clone https://github.com/githnm/probe.git && cd probe
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e . && pip install duckdb
 
@@ -124,7 +124,7 @@ ANTHROPIC_API_KEY=sk-... probe diff --db examples/shop.duckdb \
 ## GitHub Action
 
 ```yaml
-- uses: probe-sql/probe@v0.1.0
+- uses: githnm/probe@v0.1.0
   with:
     old-sql: "@models/orders_old.sql"
     new-sql: "@models/orders_new.sql"
