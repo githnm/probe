@@ -3,5 +3,6 @@
   "description": "WHERE clause silently filters rows, shifting downstream metrics.",
   "expected_severity": "warn",
   "expected_probe": "row_count",
+  "also_fires": ["metric_sum"],
   "key": "txn_id"
 }

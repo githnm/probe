@@ -3,7 +3,7 @@
 import pytest
 
 from probe.db import DuckDBAdapter
-from probe.probes import column_presence, grain, null_rate, row_count
+from probe.probes import column_presence, grain, metric_sum, null_rate, row_count
 
 
 @pytest.fixture()
@@ -180,3 +180,53 @@ class TestColumnPresence:
         result = column_presence(adapter, OLD_SQL, new_sql)
         assert result.new_value == ["amount", "id", "customer"]
         assert result.status == "ok"
+
+
+class TestMetricSum:
+    def test_no_change(self, adapter):
+        result = metric_sum(adapter, OLD_SQL, OLD_SQL)
+        assert result.name == "metric_sum"
+        assert result.status == "ok"
+        assert result.delta["amount"] == 0
+
+    def test_amount_doubles_on_fanout(self, adapter):
+        new_sql = (
+            "SELECT * FROM orders"
+            " UNION ALL SELECT * FROM orders"
+        )
+        result = metric_sum(adapter, OLD_SQL, new_sql, metrics=["amount"])
+        assert result.status == "changed"
+        assert result.new_value["amount"] == result.old_value["amount"] * 2
+        assert result.delta["amount"] > 0
+
+    def test_auto_detects_numeric_columns(self, adapter):
+        result = metric_sum(adapter, OLD_SQL, OLD_SQL)
+        assert "id" in result.old_value
+        assert "amount" in result.old_value
+        assert "customer" not in result.old_value
+
+    def test_explicit_metrics_override(self, adapter):
+        result = metric_sum(adapter, OLD_SQL, OLD_SQL, metrics=["amount"])
+        assert list(result.old_value.keys()) == ["amount"]
+
+    def test_no_numeric_columns_is_unverified(self, adapter):
+        text_sql = "SELECT customer FROM orders"
+        result = metric_sum(adapter, text_sql, text_sql)
+        assert result.status == "unverified"
+        assert result.receipt.result == "no numeric columns"
+
+    def test_receipt_has_sql_and_pct(self, adapter):
+        new_sql = (
+            "SELECT * FROM orders"
+            " UNION ALL SELECT * FROM orders"
+        )
+        result = metric_sum(adapter, OLD_SQL, new_sql, metrics=["amount"])
+        assert "SUM" in result.receipt.sql
+        assert "pct_change" in result.receipt.result
+        assert result.receipt.result["pct_change"]["amount"] == 100.0
+
+    def test_row_drop_changes_sum(self, adapter):
+        new_sql = "SELECT * FROM orders WHERE id <= 2"
+        result = metric_sum(adapter, OLD_SQL, new_sql, metrics=["amount"])
+        assert result.status == "changed"
+        assert result.delta["amount"] < 0

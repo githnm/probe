@@ -3,6 +3,6 @@
   "description": "One-to-many JOIN fans out rows, inflating row count.",
   "expected_severity": "block",
   "expected_probe": "row_count",
-  "also_fires": ["grain"],
+  "also_fires": ["grain", "metric_sum"],
   "key": "order_id"
 }

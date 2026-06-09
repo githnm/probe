@@ -29,6 +29,9 @@ def classify(result: ProbeResult) -> str:
                     return "warn"
         return "info"
 
+    if result.name == "metric_sum":
+        return "warn"
+
     if result.name == "column_presence":
         delta = result.delta
         if isinstance(delta, dict) and delta.get("removed"):

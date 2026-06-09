@@ -3,6 +3,6 @@
   "description": "Model changes from order-level to line-item-level grain, duplicating order_id.",
   "expected_severity": "block",
   "expected_probe": "grain",
-  "also_fires": ["row_count", "column_presence"],
+  "also_fires": ["row_count", "column_presence", "metric_sum"],
   "key": "order_id"
 }

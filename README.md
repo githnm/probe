@@ -72,6 +72,7 @@ new.sql ──┘                  ├── null_rate ──┤     (with recei
 | `grain` | `COUNT(*)` vs `COUNT(DISTINCT key)` | `block` (no key: `unverified`) |
 | `null_rate` | `% NULL` per column, old vs new | increase: `warn` |
 | `column_presence` | column names added/removed | removed: `block`, added: `info` |
+| `metric_sum` | `SUM(col)` per numeric column, old vs new | `warn` (no numerics: `unverified`) |
 
 ### Receipt contract
 
@@ -145,7 +146,7 @@ must use a **read-only role**.
 
 ```bash
 # Run the seed benchmark (5 known-answer cases)
-probe-bench
+python -m tests.bench
 ```
 
 Current results: **5/5 catch rate, 0 false positives** across fan-out,
@@ -160,7 +161,7 @@ pip install -e ".[dev]"
 
 pytest           # 123 tests (Postgres tests need PROBE_PG_URL)
 ruff check .     # linter
-probe-bench      # seed benchmarks
+python -m tests.bench      # seed benchmarks
 ```
 
 ## Roadmap

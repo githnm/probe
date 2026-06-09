@@ -20,7 +20,6 @@ dev = ["duckdb", "psycopg[binary]>=3.1", "pytest", "ruff"]
 
 [project.scripts]
 probe = "probe.cli:main"
-probe-bench = "tests.bench:main"
 
 [tool.ruff]
 target-version = "py311"

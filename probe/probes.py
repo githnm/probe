@@ -1,4 +1,4 @@
-"""Probes: row_count, grain, null_rate, column_presence."""
+"""Probes: row_count, grain, null_rate, column_presence, metric_sum."""
 
 from __future__ import annotations
 
@@ -7,8 +7,16 @@ from typing import Any
 from probe import ProbeResult, Receipt
 from probe.db import Adapter
 
+_NUMERIC_TYPES = {
+    "INTEGER", "INT", "BIGINT", "SMALLINT", "TINYINT", "HUGEINT",
+    "FLOAT", "DOUBLE", "DOUBLE PRECISION", "REAL",
+    "DECIMAL", "NUMERIC", "MONEY",
+}
 
-def row_count(adapter: Adapter, old_sql: str, new_sql: str, key: Any = None) -> ProbeResult:
+
+def row_count(
+    adapter: Adapter, old_sql: str, new_sql: str, *, key: Any = None, **kwargs: Any
+) -> ProbeResult:
     old_query = f"SELECT COUNT(*) AS cnt FROM ({old_sql}) _t"
     new_query = f"SELECT COUNT(*) AS cnt FROM ({new_sql}) _t"
     old_cnt = adapter.run(old_query)[0]["cnt"]
@@ -25,7 +33,9 @@ def row_count(adapter: Adapter, old_sql: str, new_sql: str, key: Any = None) -> 
     )
 
 
-def grain(adapter: Adapter, old_sql: str, new_sql: str, key: Any = None) -> ProbeResult:
+def grain(
+    adapter: Adapter, old_sql: str, new_sql: str, *, key: Any = None, **kwargs: Any
+) -> ProbeResult:
     if key is None:
         return ProbeResult(
             name="grain",
@@ -58,7 +68,9 @@ def grain(adapter: Adapter, old_sql: str, new_sql: str, key: Any = None) -> Prob
     )
 
 
-def null_rate(adapter: Adapter, old_sql: str, new_sql: str, key: Any = None) -> ProbeResult:
+def null_rate(
+    adapter: Adapter, old_sql: str, new_sql: str, *, key: Any = None, **kwargs: Any
+) -> ProbeResult:
     old_col_names = [name for name, _ in adapter.columns(old_sql)]
     new_col_names = [name for name, _ in adapter.columns(new_sql)]
     shared = [c for c in old_col_names if c in new_col_names]
@@ -88,8 +100,74 @@ def null_rate(adapter: Adapter, old_sql: str, new_sql: str, key: Any = None) -> 
     )
 
 
+def metric_sum(
+    adapter: Adapter,
+    old_sql: str,
+    new_sql: str,
+    *,
+    key: Any = None,
+    metrics: list[str] | None = None,
+    **kwargs: Any,
+) -> ProbeResult:
+    if metrics:
+        targets = metrics
+    else:
+        old_cols = {
+            name for name, typ in adapter.columns(old_sql)
+            if str(typ).upper().split("(")[0].strip() in _NUMERIC_TYPES
+        }
+        new_cols = adapter.columns(new_sql)
+        targets = [
+            name for name, typ in new_cols
+            if str(typ).upper().split("(")[0].strip() in _NUMERIC_TYPES
+            and name in old_cols
+        ]
+
+    if not targets:
+        return ProbeResult(
+            name="metric_sum",
+            question="Did any numeric totals change?",
+            old_value=None,
+            new_value=None,
+            delta=None,
+            status="unverified",
+            receipt=Receipt(sql="", result="no numeric columns"),
+        )
+
+    exprs = ", ".join(f"SUM({c}) AS {c}" for c in targets)
+    old_query = f"SELECT {exprs} FROM ({old_sql}) _t"
+    new_query = f"SELECT {exprs} FROM ({new_sql}) _t"
+    old_row = adapter.run(old_query)[0]
+    new_row = adapter.run(new_query)[0]
+
+    def _num(v: Any) -> float:
+        return float(v) if v is not None else 0.0
+
+    old_sums = {c: _num(old_row[c]) for c in targets}
+    new_sums = {c: _num(new_row[c]) for c in targets}
+    delta = {c: round(new_sums[c] - old_sums[c], 6) for c in targets}
+    pct = {
+        c: round((new_sums[c] - old_sums[c]) / old_sums[c] * 100, 2)
+        if old_sums[c] != 0 else None
+        for c in targets
+    }
+    changed = any(d != 0 for d in delta.values())
+    return ProbeResult(
+        name="metric_sum",
+        question="Did any numeric totals change?",
+        old_value=old_sums,
+        new_value=new_sums,
+        delta=delta,
+        status="ok" if not changed else "changed",
+        receipt=Receipt(
+            sql=new_query,
+            result={"old": old_sums, "new": new_sums, "pct_change": pct},
+        ),
+    )
+
+
 def column_presence(
-    adapter: Adapter, old_sql: str, new_sql: str, key: Any = None
+    adapter: Adapter, old_sql: str, new_sql: str, *, key: Any = None, **kwargs: Any
 ) -> ProbeResult:
     old_cols = adapter.columns(old_sql)
     new_cols = adapter.columns(new_sql)

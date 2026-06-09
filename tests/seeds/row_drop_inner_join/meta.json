@@ -3,5 +3,6 @@
   "description": "INNER JOIN silently drops rows for unmatched users.",
   "expected_severity": "warn",
   "expected_probe": "row_count",
+  "also_fires": ["metric_sum"],
   "key": "event_id"
 }

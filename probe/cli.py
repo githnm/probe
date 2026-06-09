@@ -18,8 +18,9 @@ def main():
 @click.option("--key", default=None, help="Column name for grain probe.")
 @click.option("--manifest", "manifest_path", default=None, help="Path to dbt manifest.json.")
 @click.option("--model", default=None, help="Changed model name (used with --manifest).")
+@click.option("--metric", "metrics", multiple=True, help="Numeric column(s) to sum (repeatable).")
 @click.option("--explain", "explain", is_flag=True, help="Add LLM explanation of findings.")
-def diff(old, new, db_url, fmt, setup_sql, key, manifest_path, model, explain):
+def diff(old, new, db_url, fmt, setup_sql, key, manifest_path, model, metrics, explain):
     """Compare before/after SQL and report findings."""
     from probe.db import DuckDBAdapter
     from probe.diff import run_diff
@@ -45,8 +46,10 @@ def diff(old, new, db_url, fmt, setup_sql, key, manifest_path, model, explain):
                 stmt = stmt.strip()
                 if stmt:
                     adapter.run(stmt)
+        metric_list = _parse_metrics(metrics) or None
         report = run_diff(
-            adapter, old_sql, new_sql, key=key, scope_columns=scope_columns
+            adapter, old_sql, new_sql, key=key,
+            scope_columns=scope_columns, metrics=metric_list,
         )
     finally:
         adapter.close()
@@ -71,6 +74,16 @@ def diff(old, new, db_url, fmt, setup_sql, key, manifest_path, model, explain):
 
     if report.severity == "block":
         raise SystemExit(1)
+
+
+def _parse_metrics(raw: tuple[str, ...]) -> list[str]:
+    result = []
+    for item in raw:
+        for part in item.split(","):
+            part = part.strip()
+            if part:
+                result.append(part)
+    return result
 
 
 def _read_sql(value: str) -> str:

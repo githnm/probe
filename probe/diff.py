@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from probe import Report
 from probe.db import Adapter
-from probe.probes import column_presence, grain, null_rate, row_count
+from probe.probes import column_presence, grain, metric_sum, null_rate, row_count
 from probe.severity import overall
 
-ALL_PROBES = [row_count, grain, null_rate, column_presence]
+ALL_PROBES = [row_count, grain, null_rate, column_presence, metric_sum]
 
 
 def run_diff(
@@ -16,8 +16,12 @@ def run_diff(
     new_sql: str,
     key: str | None = None,
     scope_columns: list[str] | None = None,
+    metrics: list[str] | None = None,
 ) -> Report:
-    results = [p(adapter, old_sql, new_sql, key=key) for p in ALL_PROBES]
+    results = [
+        p(adapter, old_sql, new_sql, key=key, metrics=metrics)
+        for p in ALL_PROBES
+    ]
 
     if scope_columns is not None:
         results = _filter_by_scope(results, scope_columns)
