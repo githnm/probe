@@ -3,7 +3,7 @@
 import json
 
 from probe import Explanation, Finding, ProbeResult, Receipt, Report
-from probe.orchestrate import _parse_and_enforce, explain_report
+from probe.orchestrate import _parse_and_enforce, _strip_fences, explain_report
 
 
 def _make_report():
@@ -136,6 +136,66 @@ class TestParseAndEnforce:
         exp = _parse_and_enforce(raw, report)
         assert exp.summary == "All good."
         assert exp.findings == []
+
+
+class TestStripFences:
+    def test_strips_json_fence(self):
+        raw = '```json\n{"summary": "hi"}\n```'
+        assert _strip_fences(raw) == '{"summary": "hi"}'
+
+    def test_strips_plain_fence(self):
+        raw = '```\n{"summary": "hi"}\n```'
+        assert _strip_fences(raw) == '{"summary": "hi"}'
+
+    def test_no_fence_passthrough(self):
+        raw = '{"summary": "hi"}'
+        assert _strip_fences(raw) == '{"summary": "hi"}'
+
+    def test_strips_whitespace_around_fences(self):
+        raw = '  \n```json\n{"a": 1}\n```\n  '
+        assert _strip_fences(raw) == '{"a": 1}'
+
+
+class TestFencedLLMResponse:
+    def test_fenced_json_is_parsed(self):
+        fenced = '```json\n' + json.dumps({
+            "summary": "Fan-out detected.",
+            "findings": [
+                {"claim": "Row count doubled.", "backed_by": "row_count"},
+            ],
+        }) + '\n```'
+        report = _make_report()
+        exp = explain_report(report, FakeLLM(fenced))
+        assert exp.summary == "Fan-out detected."
+        assert len(exp.findings) == 1
+        assert exp.findings[0].confirmed is True
+
+    def test_fenced_with_fake_probe_is_unconfirmed(self):
+        fenced = '```json\n' + json.dumps({
+            "summary": "Something happened.",
+            "findings": [
+                {"claim": "Bad vibes.", "backed_by": "vibes_probe"},
+            ],
+        }) + '\n```'
+        report = _make_report()
+        exp = explain_report(report, FakeLLM(fenced))
+        assert exp.findings[0].confirmed is False
+        assert exp.findings[0].backed_by == "vibes_probe"
+
+
+class TestPromptContent:
+    def test_prompt_says_no_fences(self):
+        prompts = []
+
+        class CaptureLLM:
+            def complete(self, prompt):
+                prompts.append(prompt)
+                return json.dumps({"summary": "ok", "findings": []})
+
+        report = _make_report()
+        explain_report(report, CaptureLLM())
+        assert "no markdown fences" in prompts[0].lower() or "No markdown fences" in prompts[0]
+        assert "raw JSON" in prompts[0] or "raw json" in prompts[0].lower()
 
 
 class TestNoApiKey:

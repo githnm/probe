@@ -23,8 +23,9 @@ def _build_prompt(report: Report) -> str:
     lines = [
         "You are a SQL reviewer. Below are probe results comparing old vs new SQL.",
         "Write a plain-English summary and a list of findings.",
-        "Respond in JSON: {\"summary\": \"...\", \"findings\": [{\"claim\": \"...\", "
-        "\"backed_by\": \"<probe_name>\"}]}",
+        "Respond with raw JSON only. No markdown fences, no prose before or after.",
+        'Format: {"summary": "...", "findings": [{"claim": "...", '
+        '"backed_by": "<probe_name>"}]}',
         "Only reference probe names that appear in the results below.",
         "",
     ]
@@ -36,10 +37,22 @@ def _build_prompt(report: Report) -> str:
     return "\n".join(lines)
 
 
+def _strip_fences(raw: str) -> str:
+    text = raw.strip()
+    if text.startswith("```"):
+        first_newline = text.find("\n")
+        if first_newline != -1:
+            text = text[first_newline + 1:]
+    if text.endswith("```"):
+        text = text[:-3]
+    return text.strip()
+
+
 def _parse_and_enforce(raw: str, report: Report) -> Explanation:
     probe_names = {r.name for r in report.results}
+    cleaned = _strip_fences(raw)
     try:
-        data = json.loads(raw)
+        data = json.loads(cleaned)
     except (json.JSONDecodeError, TypeError):
         return Explanation(
             summary=raw,
