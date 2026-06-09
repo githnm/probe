@@ -142,6 +142,20 @@ The action posts a markdown comment on the PR with receipts, and fails the
 check on `block` severity. Warehouse credentials come from repo secrets and
 must use a **read-only role**.
 
+## Local UI
+
+```bash
+pip install -e ".[ui]"
+pip install duckdb
+probe-ui
+```
+
+A Streamlit app opens in your browser with two tabs:
+- **Lineage**: load a dbt `manifest.json`, view the model DAG, pick a model to
+  highlight its downstream impact path and impacted columns.
+- **Diff**: paste old/new SQL, run all probes, see a colored severity badge and
+  one card per finding with receipt details in an expander.
+
 ## Benchmarks
 
 ```bash

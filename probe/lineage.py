@@ -55,6 +55,18 @@ class LineageGraph:
 
         return sorted(hit)
 
+    def nodes(self) -> list[str]:
+        return [m.name for m in self.models.values()]
+
+    def edges(self) -> list[tuple[str, str]]:
+        result = []
+        for parent_id, children in self.child_map.items():
+            parent = self.models[parent_id].name
+            for child_id in children:
+                child = self.models[child_id].name
+                result.append((parent, child))
+        return result
+
     def resolve(self, name: str) -> str | None:
         for uid, m in self.models.items():
             if m.name == name or uid == name:
