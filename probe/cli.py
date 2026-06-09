@@ -56,7 +56,11 @@ def diff(old, new, db_url, fmt, setup_sql, key, manifest_path, model, explain):
 
         client = get_llm_client()
         if client:
-            report.explanation = explain_report(report, client)
+            try:
+                report.explanation = explain_report(report, client)
+            except ImportError as e:
+                click.echo(f"Error: {e}", err=True)
+                raise SystemExit(1)
         else:
             click.echo("Warning: --explain requires ANTHROPIC_API_KEY or OPENAI_API_KEY", err=True)
 

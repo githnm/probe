@@ -119,7 +119,8 @@ probe diff --db warehouse.duckdb \
   --old @old.sql --new @new.sql \
   --manifest target/manifest.json --model stg_orders
 
-# LLM explanation (optional, needs API key)
+# LLM explanation (optional, needs API key + explain extra)
+pip install "probe[explain]"
 ANTHROPIC_API_KEY=sk-... probe diff --db examples/shop.duckdb \
   --old @examples/old.sql --new @examples/new.sql --explain
 ```

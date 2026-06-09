@@ -79,7 +79,13 @@ class _EnvLLMClient:
         return self._call_openai(prompt)
 
     def _call_anthropic(self, prompt: str) -> str:
-        import anthropic
+        try:
+            import anthropic
+        except ImportError:
+            raise ImportError(
+                "The anthropic package is required for --explain. "
+                'Install it with: pip install "probe[explain]"'
+            ) from None
 
         client = anthropic.Anthropic(api_key=self._api_key)
         message = client.messages.create(
@@ -90,7 +96,13 @@ class _EnvLLMClient:
         return message.content[0].text
 
     def _call_openai(self, prompt: str) -> str:
-        import openai
+        try:
+            import openai
+        except ImportError:
+            raise ImportError(
+                "The openai package is required for --explain. "
+                'Install it with: pip install "probe[explain]"'
+            ) from None
 
         client = openai.OpenAI(api_key=self._api_key)
         response = client.chat.completions.create(
