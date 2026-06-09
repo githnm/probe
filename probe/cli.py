@@ -76,6 +76,60 @@ def diff(old, new, db_url, fmt, setup_sql, key, manifest_path, model, metrics, e
         raise SystemExit(1)
 
 
+@main.command()
+@click.option("--upstream", required=True, help="Upstream SQL (query text or @file).")
+@click.option("--downstream", required=True, help="Downstream SQL (query text or @file).")
+@click.option("--db", "db_url", default=":memory:", help="DuckDB database path.")
+@click.option("--key", required=True, help="Join key column.")
+@click.option("--setup", "setup_sql", default=None, help="SQL to run before verify.")
+@click.option("--map", "mappings_str", default=None, help="Column mappings: down=up,down2=up2.")
+def verify(upstream, downstream, db_url, key, setup_sql, mappings_str):
+    """Verify claimed lineage edges against real data."""
+    from probe.db import DuckDBAdapter
+    from probe.verify import verify as run_verify
+
+    up_sql = _read_sql(upstream)
+    down_sql = _read_sql(downstream)
+
+    mappings = None
+    if mappings_str:
+        mappings = {}
+        for pair in mappings_str.split(","):
+            pair = pair.strip()
+            if "=" in pair:
+                d, u = pair.split("=", 1)
+                mappings[d.strip()] = u.strip()
+
+    adapter = DuckDBAdapter.connect(db_url)
+    try:
+        if setup_sql:
+            for stmt in _read_sql(setup_sql).split(";"):
+                stmt = stmt.strip()
+                if stmt:
+                    adapter.run(stmt)
+        results = run_verify(adapter, up_sql, down_sql, key, mappings=mappings)
+    finally:
+        adapter.close()
+
+    has_killed = False
+    for r in results:
+        icon = {"verified": ".", "killed": "X", "unverified": "?"}.get(r.verdict, "?")
+        click.echo(f"  [{icon}] {r.downstream_col} <- {r.claimed_parent}: {r.verdict}")
+        if r.match_rate is not None:
+            click.echo(f"      match_rate: {r.match_rate}%")
+        if r.real_parent:
+            click.echo(f"      real_parent: {r.real_parent}")
+        click.echo("      receipt:")
+        if r.receipt.sql:
+            click.echo(f"        sql: {r.receipt.sql}")
+        click.echo(f"        result: {r.receipt.result}")
+        if r.verdict == "killed":
+            has_killed = True
+
+    if has_killed:
+        raise SystemExit(1)
+
+
 def _parse_metrics(raw: tuple[str, ...]) -> list[str]:
     result = []
     for item in raw:
